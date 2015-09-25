@@ -42,9 +42,7 @@ public class ScannerView extends SurfaceView implements SurfaceHolder.Callback {
     }
 
     @Override
-    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-//        refreshCameraPreview();
-    }
+    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {}
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
@@ -70,27 +68,6 @@ public class ScannerView extends SurfaceView implements SurfaceHolder.Callback {
             Log.e(TAG, "Failed to start camera preview!", e);
         }
     }
-
-//    public void refreshCameraPreview() {
-//        if (mCamera == null || getHolder().getSurface() == null) {
-//            return;
-//        }
-//
-//        // stop preview before making changes
-//        stopCameraPreview();
-//
-//        // set preview size and make any resize, rotate or reformatting changes here
-//        updatePreview();
-//
-//        try {
-//            mCamera.setPreviewDisplay(getHolder());
-//        } catch (Exception e) {
-//            Log.d(TAG, "Failed to set the preview display while refreshing!", e);
-//        }
-//
-//        // start preview with new settings
-//        startCameraPreview();
-//    }
 
     public void stopCameraPreview() {
         if (mCamera == null) {
@@ -118,18 +95,14 @@ public class ScannerView extends SurfaceView implements SurfaceHolder.Callback {
         mCamera = null;
     }
 
-//    private void updatePreview() {
-//        mCamera.setDisplayOrientation(90);
-//    }
-
     /** A safe way to get an instance of the Camera object. */
     private static Camera getCameraInstance() {
         try {
-            return Camera.open(); // attempt to get a Camera instance
+            return Camera.open();
         } catch (Exception e) {
-            // Camera is not available (in use or does not exist)
+            // Camera is in use or does not exist
             Log.e(TAG, "Camera was not available!", e);
         }
-        return null; // camera is unavailable
+        return null;
     }
 }
