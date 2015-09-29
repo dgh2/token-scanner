@@ -28,6 +28,7 @@ import java.util.LinkedList;
 
 public class ScannerActivity extends Activity implements CameraBridgeViewBase.CvCameraViewListener {
     private static final String TAG = ScannerActivity.class.getName();
+    private static final double ELLIPSE_MATCH_THRESHOLD = 0.01;
 
     private JavaCameraView scannerView;
     private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
@@ -121,13 +122,10 @@ public class ScannerActivity extends Activity implements CameraBridgeViewBase.Cv
     }
 
     private Mat processFrame(final Mat frame) {
-//        if (outputFrame.size().width > 720) {
-//            Imgproc.resize(outputFrame, outputFrame,
-//                    new Size(720 * outputFrame.size().width / inputFrame.size().height, 720));
-//        }
         Mat grayscale = new Mat();
         Mat blurred = new Mat();
         Mat contourMap = new Mat();
+        Mat ellipseMap = new Mat();
         Mat result = new Mat();
         LinkedList<MatOfPoint> contours = new LinkedList<>();
 
@@ -148,14 +146,14 @@ public class ScannerActivity extends Activity implements CameraBridgeViewBase.Cv
                 break;
             case CONTOURS_WITH_BOUNDS:
                 contourMap.copyTo(result);
-                fitEllipsisToContours(result, new Scalar(255, 0, 0), contours);
+                drawEllipsesForContours(result, new Scalar(255, 0, 0), contours);
                 break;
             case CONTOURS:
                 contourMap.copyTo(result);
                 break;
             case RESULT:
                 frame.copyTo(result);
-                fitEllipsisToContours(result, new Scalar(0, 255, 0), contours);
+                drawEllipsesForContours(result, new Scalar(0, 255, 0), contours);
                 break;
             default:
                 Log.w(TAG, "Unrecognized display type detected: " + display.name());
@@ -164,13 +162,31 @@ public class ScannerActivity extends Activity implements CameraBridgeViewBase.Cv
         return result;
     }
 
-    private void fitEllipsisToContours(final Mat frame, Scalar color, final LinkedList<MatOfPoint> contours) {
-        MatOfPoint2f temp;
+    private LinkedList<RotatedRect> getEllipsesForContours(final LinkedList<MatOfPoint> contours) {
+        MatOfPoint2f mat2F;
+        LinkedList<RotatedRect> ellipseRects = new LinkedList<>();
         for (int i = 0; i < contours.size(); i++) {
-            temp = new MatOfPoint2f();
-            temp.fromList(contours.get(i).toList());
-            Rect bounds = Imgproc.boundingRect(contours.get(i));
-            Imgproc.rectangle(frame, bounds.tl(), bounds.br(), color, 4);
+            mat2F = new MatOfPoint2f();
+            mat2F.fromList(contours.get(i).toList());
+            ellipseRects.add(Imgproc.fitEllipse(mat2F));
         }
+        return ellipseRects;
+    }
+
+    private void drawEllipses(final Mat frame, final Scalar color, LinkedList<RotatedRect> ellipseRotatedRects) {
+        for (RotatedRect rotatedRect : ellipseRotatedRects) {
+            Imgproc.ellipse(frame, rotatedRect, color, 2);
+        }
+    }
+
+    private void drawEllipsesForContours(final Mat frame, final Scalar color, final LinkedList<MatOfPoint> contours) {
+        drawEllipses(frame, color, getEllipsesForContours(contours));
+    }
+
+    private LinkedList<RotatedRect> getEllipsesForContours(final Mat A, final Mat B) {
+        if (Imgproc.matchShapes(A, B, Imgproc.CV_CONTOURS_MATCH_I1, 0.0) <= ELLIPSE_MATCH_THRESHOLD) {
+
+        }
+        return ellipseRects;
     }
 }
