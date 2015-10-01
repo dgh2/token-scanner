@@ -25,9 +25,6 @@ import java.util.LinkedList;
 
 public class ScannerActivity extends Activity implements CameraBridgeViewBase.CvCameraViewListener {
     private static final String TAG = ScannerActivity.class.getName();
-    private static final double THRESHOLD_VALUE = 75;
-    private static final double MIN_BOUNDBOX_VOLUME_PERCENT = 0.01;
-    private static final double ELLIPSE_MATCH_THRESHOLD = 0.0025;
     private static final Scalar SCALAR_RED = new Scalar(255, 0, 0);
     private static final Scalar SCALAR_GREEN = new Scalar(0, 255, 0);
     private static final Scalar SCALAR_BLUE = new Scalar(0, 0, 255);
@@ -50,8 +47,15 @@ public class ScannerActivity extends Activity implements CameraBridgeViewBase.Cv
 
     private enum DISPLAY_TYPE {
         CAMERA_VIEW,
+        GRAYSCALE,
+        INFLATE_ERODE,
+        INFLATE_ERODE2,
+        ERODE_INFLATE,
+        ERODE_INFLATE2,
         FILTERED,
+        CANNY,
         CONTOURS,
+        FILTERED_CONTOURS,
         ELLIPSE_BOXES,
         RESULT;
         public DISPLAY_TYPE next() {
@@ -124,51 +128,105 @@ public class ScannerActivity extends Activity implements CameraBridgeViewBase.Cv
 
     private Mat processFrame(final Mat frame) {
         Mat grayscale = new Mat();
-        Mat bilateralFiltered = new Mat();
+        Mat blurred = new Mat();
+        Mat weathered = new Mat();
+        Mat cannyMap = new Mat();
         Mat contourMap = new Mat();
         Mat result = new Mat();
         LinkedList<MatOfPoint> contours = new LinkedList<>();
-
-        Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-        Imgproc.bilateralFilter(grayscale, bilateralFiltered, 9, 150, 50);
-        Imgproc.Canny(bilateralFiltered, contourMap, 50, 150);
-        Imgproc.findContours(contourMap, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_NONE);
-        filterContours(contours);
+        Point structuringAnchor = new Point(-1, -1);
+        Mat structuringElement = Imgproc.getStructuringElement(Imgproc.CV_SHAPE_ELLIPSE, new Size(6, 6));
 
         switch (display) {
             case CAMERA_VIEW:
-                frame.copyTo(result);
-                break;
+                return frame;
+            case GRAYSCALE:
+                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
+                return grayscale;
+            case INFLATE_ERODE:
+                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
+                Imgproc.dilate(grayscale, weathered, structuringElement, structuringAnchor, 1);
+                Imgproc.erode(grayscale, weathered, structuringElement, structuringAnchor, 1);
+                return grayscale;
+            case INFLATE_ERODE2:
+                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
+                Imgproc.dilate(grayscale, weathered, structuringElement, structuringAnchor, 2);
+                Imgproc.erode(grayscale, weathered, structuringElement, structuringAnchor, 2);
+                return grayscale;
+            case ERODE_INFLATE:
+                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
+                Imgproc.erode(grayscale, weathered, structuringElement, structuringAnchor, 1);
+                Imgproc.dilate(grayscale, weathered, structuringElement, structuringAnchor, 1);
+                return grayscale;
+            case ERODE_INFLATE2:
+                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
+                Imgproc.erode(grayscale, weathered, structuringElement, structuringAnchor, 2);
+                Imgproc.dilate(grayscale, weathered, structuringElement, structuringAnchor, 2);
+                return grayscale;
             case FILTERED:
-                bilateralFiltered.copyTo(result);
-                break;
+                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
+//                Imgproc.bilateralFilter(grayscale, blurred, 9, 150, 50);
+                Imgproc.GaussianBlur(grayscale, blurred, new Size(5, 5), 5, 5);
+                return blurred;
+            case CANNY:
+                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
+//                Imgproc.bilateralFilter(grayscale, blurred, 9, 150, 50);
+                Imgproc.GaussianBlur(grayscale, blurred, new Size(5, 5), 5, 5);
+                Imgproc.Canny(blurred, cannyMap, 50, 150);
+                return cannyMap;
             case CONTOURS:
-                contourMap.copyTo(result);
-                break;
-            case RESULT:
-                frame.copyTo(result);
-                detectEllipticalContours(result, contours);
-                break;
+                frame.copyTo(contourMap);
+                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
+//                Imgproc.bilateralFilter(grayscale, blurred, 9, 150, 50);
+                Imgproc.GaussianBlur(grayscale, blurred, new Size(5, 5), 5, 5);
+                Imgproc.Canny(blurred, cannyMap, 50, 150);
+                Imgproc.findContours(cannyMap, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_NONE);
+                Imgproc.drawContours(contourMap, contours, -1, SCALAR_RED);
+                return contourMap;
+            case FILTERED_CONTOURS:
+                frame.copyTo(contourMap);
+                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
+//                Imgproc.bilateralFilter(grayscale, blurred, 9, 150, 50);
+                Imgproc.GaussianBlur(grayscale, blurred, new Size(5, 5), 5, 5);
+                Imgproc.Canny(blurred, cannyMap, 50, 150);
+                Imgproc.findContours(cannyMap, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_NONE);
+                filterContours(contours);
+                Imgproc.drawContours(contourMap, contours, -1, SCALAR_RED);
+                return contourMap;
             case ELLIPSE_BOXES:
                 frame.copyTo(result);
+                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
+//                Imgproc.bilateralFilter(grayscale, blurred, 9, 150, 50);
+                Imgproc.GaussianBlur(grayscale, blurred, new Size(5, 5), 5, 5);
+                Imgproc.Canny(blurred, cannyMap, 50, 150);
+                Imgproc.findContours(cannyMap, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_NONE);
+                filterContours(contours);
                 for (MatOfPoint contour : contours) {
                     drawRotatedRect(result, getEllipseForContour(contour));
                 }
-                break;
+                return result;
+            case RESULT:
+                frame.copyTo(result);
+                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
+//                Imgproc.bilateralFilter(grayscale, blurred, 9, 150, 50);
+                Imgproc.GaussianBlur(grayscale, blurred, new Size(5, 5), 5, 5);
+                Imgproc.Canny(blurred, cannyMap, 50, 150);
+                Imgproc.findContours(cannyMap, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_NONE);
+                filterContours(contours);
+                detectEllipticalContours(result, contours);
+                return result;
             default:
                 Log.w(TAG, "Unrecognized display type detected: " + display.name());
-                display = DISPLAY_TYPE.RESULT;
-                frame.copyTo(result);
-                detectEllipticalContours(result, contours);
-                break;
+                display = display.next();
+                return frame;
         }
-        return result;
     }
 
     private void filterContours(LinkedList<MatOfPoint> contours) {
         LinkedList<MatOfPoint> ignoredContours = new LinkedList<>();
         for (MatOfPoint contour : contours) {
             if (!contour.isContinuous() || contour.toList().size() < 5) {
+                // || !Imgproc.isContourConvex(contour)
                 ignoredContours.add(contour);
             }
         }
