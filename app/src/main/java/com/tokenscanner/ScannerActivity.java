@@ -8,14 +8,11 @@ import android.widget.Toast;
 
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
-import org.opencv.android.JavaCameraView;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
-import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfPoint;
 import org.opencv.core.MatOfPoint2f;
-import org.opencv.core.Point;
 import org.opencv.core.RotatedRect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
@@ -25,11 +22,14 @@ import java.util.LinkedList;
 
 public class ScannerActivity extends Activity implements CameraBridgeViewBase.CvCameraViewListener {
     private static final String TAG = ScannerActivity.class.getName();
-    private static final Scalar SCALAR_RED = new Scalar(255, 0, 0);
+    private static final Scalar SCALAR_RED = new Scalar(255, 255, 255);
     private static final Scalar SCALAR_GREEN = new Scalar(0, 255, 0);
-    private static final Scalar SCALAR_BLUE = new Scalar(0, 0, 255);
+//    private static final Scalar SCALAR_BLUE = new Scalar(0, 0, 255);
+    private static final double SCALED_DOWN_MAX_IMAGE_WIDTH = 320;
+    private static final double SCALED_DOWN_MAX_IMAGE_HEIGHT = 180;
 
     private ScannerView scannerView;
+//    private ScannerAsyncManager scannerAsyncManager = new ScannerAsyncManager();
     private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
         public void onManagerConnected(int status) {
@@ -98,8 +98,6 @@ public class ScannerActivity extends Activity implements CameraBridgeViewBase.Cv
                 @Override
                 public void onClick(View v) {
                     scannerView.toggleLight();
-//                    display = display.next();
-//                    Toast.makeText(getApplicationContext(), display.name() + " view", Toast.LENGTH_SHORT).show();
                 }
             });
         }
@@ -149,247 +147,69 @@ public class ScannerActivity extends Activity implements CameraBridgeViewBase.Cv
     }
 
     private Mat processFrame(final Mat input) {
-        Log.w(TAG, "Starting test!");
-        int test = 0;
-        try {
-            Mat frame = new Mat();
-            Mat canny = new Mat();
-            Mat output = new Mat();
-            Log.w(TAG, "Test: " + ++test);
-            Imgproc.resize(input, frame, new Size(), 0.25, 0.25, Imgproc.INTER_AREA);
-            Log.w(TAG, "Test: " + ++test);
-            Imgproc.Canny(frame, canny, 50, 150);
-            Log.w(TAG, "Test: " + ++test);
-            Imgproc.resize(canny, output, new Size(scannerView.getWidth(), scannerView.getHeight()),
-                    0, 0, Imgproc.INTER_AREA);
-            Log.w(TAG, "Test Complete: " + ++test);
-            return output;
-        } catch (Exception e) {
-            Log.e(TAG, "EXCEPTION CAUGHT!", e);
-        } finally {
-            Log.w(TAG, "Finally after test!");
-        }
-        return input;
+        LinkedList<MatOfPoint> contours = new LinkedList<>();
+        Mat frame = new Mat();
+        input.copyTo(frame);
+        Imgproc.resize(frame, frame, getScaledDownSize(frame), 0, 0, Imgproc.INTER_AREA);
+        Imgproc.cvtColor(frame, frame, Imgproc.COLOR_RGB2GRAY);
+        Imgproc.GaussianBlur(frame, frame, new Size(5, 5), 5, 5);
+        Imgproc.Canny(frame, frame, 50, 150);
+        Imgproc.resize(frame, frame, input.size(), 0, 0, Imgproc.INTER_AREA);
+        Imgproc.findContours(frame, contours, new Mat(), Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_NONE);
+        filterContours(contours);
+        input.copyTo(frame);
+        detectEllipticalContours(frame, contours);
+        return frame;
     }
 
-//    private Mat processFrame(final Mat input) {
-//        Mat frame = new Mat();
-//        input.copyTo(frame);
-//        Mat grayscale = new Mat();
-//        Mat blurred = new Mat();
-//        Mat weathered = new Mat();
-//        Mat resized = new Mat();
-//        Mat threshold = new Mat();
-//        Mat cannyMap = new Mat();
-//        Mat contourMap = new Mat();
-//        Mat result = new Mat();
-//        LinkedList<MatOfPoint> contours = new LinkedList<>();
-////        Point structuringAnchor = new Point(-1, -1);
-////        Mat structuringElement = Imgproc.getStructuringElement(Imgproc.CV_SHAPE_ELLIPSE, new Size(6, 6));
-//
-//        switch (display) {
-//            case CAMERA_VIEW:
-//                return frame;
-//            case GRAYSCALE:
-//                Imgproc.resize(input, frame,
-//                        getScaledDownSize(scannerView.getWidth(), scannerView.getHeight()),
-//                        0, 0, Imgproc.INTER_AREA);
-//                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-//                Imgproc.resize(grayscale, resized,
-//                        new Size(scannerView.getWidth(), scannerView.getHeight()),
-//                        0, 0, Imgproc.INTER_AREA);
-//                return resized;
-////            case INFLATE_ERODE:
-////                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-////                Imgproc.dilate(grayscale, weathered, structuringElement, structuringAnchor, 1);
-////                Imgproc.erode(weathered, weathered, structuringElement, structuringAnchor, 1);
-////                return weathered;
-////            case INFLATE_ERODE_THRESHOLD:
-////                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-////                Imgproc.dilate(grayscale, weathered, structuringElement, structuringAnchor, 1);
-////                Imgproc.erode(weathered, weathered, structuringElement, structuringAnchor, 1);
-////                Imgproc.threshold(weathered, threshold, 127, 255, Imgproc.THRESH_BINARY);
-////                return threshold;
-////            case INFLATE_ERODE2:
-////                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-////                Imgproc.dilate(grayscale, weathered, structuringElement, structuringAnchor, 2);
-////                Imgproc.erode(weathered, weathered, structuringElement, structuringAnchor, 2);
-////                return weathered;
-////            case INFLATE_ERODE2_THRESHOLD:
-////                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-////                Imgproc.dilate(grayscale, weathered, structuringElement, structuringAnchor, 2);
-////                Imgproc.erode(weathered, weathered, structuringElement, structuringAnchor, 2);
-////                Imgproc.threshold(weathered, threshold, 127, 255, Imgproc.THRESH_BINARY);
-////                return threshold;
-////            case ERODE_INFLATE:
-////                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-////                Imgproc.erode(grayscale, weathered, structuringElement, structuringAnchor, 1);
-////                Imgproc.dilate(weathered, weathered, structuringElement, structuringAnchor, 1);
-////                return weathered;
-////            case ERODE_INFLATE_THRESHOLD:
-////                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-////                Imgproc.erode(grayscale, weathered, structuringElement, structuringAnchor, 1);
-////                Imgproc.dilate(weathered, weathered, structuringElement, structuringAnchor, 1);
-////                Imgproc.threshold(weathered, threshold, 127, 255, Imgproc.THRESH_BINARY);
-////                return threshold;
-////            case ERODE_INFLATE2:
-////                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-////                Imgproc.erode(grayscale, weathered, structuringElement, structuringAnchor, 2);
-////                Imgproc.dilate(weathered, weathered, structuringElement, structuringAnchor, 2);
-////                return weathered;
-////            case ERODE_INFLATE2_THRESHOLD:
-////                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-////                Imgproc.erode(grayscale, weathered, structuringElement, structuringAnchor, 2);
-////                Imgproc.dilate(weathered, weathered, structuringElement, structuringAnchor, 2);
-////                Imgproc.threshold(weathered, threshold, 127, 255, Imgproc.THRESH_BINARY);
-////                return threshold;
-//            case PRE_BLURRED:
-//                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-//                Imgproc.GaussianBlur(grayscale, blurred, new Size(5, 5), 5, 5);
-//                Imgproc.resize(blurred, frame,
-//                        getScaledDownSize(scannerView.getWidth(), scannerView.getHeight()),
-//                        0, 0, Imgproc.INTER_AREA);
-//                Imgproc.resize(frame, resized,
-//                        new Size(scannerView.getWidth(), scannerView.getHeight()),
-//                        0, 0, Imgproc.INTER_AREA);
-//                return resized;
-//            case PRE_BLURRED_THRESHOLD:
-//                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-//                Imgproc.GaussianBlur(grayscale, blurred, new Size(5, 5), 5, 5);
-//                Imgproc.resize(blurred, resized,
-//                        getScaledDownSize(scannerView.getWidth(), scannerView.getHeight()),
-//                        0, 0, Imgproc.INTER_AREA);
-//                Imgproc.threshold(resized, threshold, 100, 255, Imgproc.THRESH_BINARY);
-//                Imgproc.resize(threshold, resized,
-//                        new Size(scannerView.getWidth(), scannerView.getHeight()),
-//                        0, 0, Imgproc.INTER_AREA);
-//                return resized;
-//            case POST_BLURRED:
-//                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-//                Imgproc.resize(grayscale, resized,
-//                        getScaledDownSize(scannerView.getWidth(), scannerView.getHeight()),
-//                        0, 0, Imgproc.INTER_AREA);
-//                Imgproc.GaussianBlur(resized, blurred, new Size(5, 5), 5, 5);
-//                Imgproc.resize(blurred, resized,
-//                        new Size(scannerView.getWidth(), scannerView.getHeight()),
-//                        0, 0, Imgproc.INTER_AREA);
-//                return resized;
-//            case POST_BLURRED_THRESHOLD:
-//                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-//                Imgproc.resize(grayscale, resized,
-//                        getScaledDownSize(scannerView.getWidth(), scannerView.getHeight()),
-//                        0, 0, Imgproc.INTER_AREA);
-//                Imgproc.GaussianBlur(resized, blurred, new Size(5, 5), 5, 5);
-//                Imgproc.threshold(blurred, threshold, 100, 255, Imgproc.THRESH_BINARY);
-//                Imgproc.resize(threshold, resized,
-//                        new Size(scannerView.getWidth(), scannerView.getHeight()),
-//                        0, 0, Imgproc.INTER_AREA);
-//                return resized;
-//            case CANNY:
-//                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-////                Imgproc.bilateralFilter(grayscale, blurred, 9, 150, 50);
-//                Imgproc.GaussianBlur(grayscale, blurred, new Size(5, 5), 5, 5);
-//                Imgproc.resize(blurred, resized,
-//                        getScaledDownSize(scannerView.getWidth(), scannerView.getHeight()),
-//                        0, 0, Imgproc.INTER_AREA);
-//                Imgproc.Canny(resized, cannyMap, 50, 150);
-//                Imgproc.resize(cannyMap, resized,
-//                        new Size(scannerView.getWidth(), scannerView.getHeight()),
-//                        0, 0, Imgproc.INTER_AREA);
-//                return resized;
-//            case CONTOURS:
-//                frame.copyTo(contourMap);
-//                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-////                Imgproc.bilateralFilter(grayscale, blurred, 9, 150, 50);
-//                Imgproc.GaussianBlur(grayscale, blurred, new Size(5, 5), 5, 5);
-//                Imgproc.Canny(blurred, cannyMap, 50, 150);
-//                Imgproc.findContours(cannyMap, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_NONE);
-//                Imgproc.drawContours(contourMap, contours, -1, SCALAR_RED);
-//                return contourMap;
-//            case FILTERED_CONTOURS:
-//                frame.copyTo(contourMap);
-//                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-////                Imgproc.bilateralFilter(grayscale, blurred, 9, 150, 50);
-//                Imgproc.GaussianBlur(grayscale, blurred, new Size(5, 5), 5, 5);
-//                Imgproc.Canny(blurred, cannyMap, 50, 150);
-//                Imgproc.findContours(cannyMap, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_NONE);
-//                filterContours(contours);
-//                Imgproc.drawContours(contourMap, contours, -1, SCALAR_RED);
-//                return contourMap;
-//            case ELLIPSE_BOXES:
-//                frame.copyTo(result);
-//                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-////                Imgproc.bilateralFilter(grayscale, blurred, 9, 150, 50);
-//                Imgproc.GaussianBlur(grayscale, blurred, new Size(5, 5), 5, 5);
-//                Imgproc.Canny(blurred, cannyMap, 50, 150);
-//                Imgproc.findContours(cannyMap, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_NONE);
-//                filterContours(contours);
-//                for (MatOfPoint contour : contours) {
-//                    drawRotatedRect(result, getEllipseForContour(contour));
-//                }
-//                return result;
-//            case RESULT:
-//                frame.copyTo(result);
-//                Imgproc.cvtColor(frame, grayscale, Imgproc.COLOR_RGB2GRAY);
-////                Imgproc.bilateralFilter(grayscale, blurred, 9, 150, 50);
-//                Imgproc.GaussianBlur(grayscale, blurred, new Size(5, 5), 5, 5);
-//                Imgproc.Canny(blurred, cannyMap, 50, 150);
-//                Imgproc.findContours(cannyMap, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_NONE);
-//                filterContours(contours);
-//                detectEllipticalContours(result, contours);
-//                return result;
-//            default:
-//                Log.w(TAG, "Unrecognized display type detected: " + display.name());
-//                display = display.next();
-//                return frame;
-//        }
-//    }
-
     private void filterContours(LinkedList<MatOfPoint> contours) {
+        RotatedRect minAreaRect;
         LinkedList<MatOfPoint> ignoredContours = new LinkedList<>();
         for (MatOfPoint contour : contours) {
-            if (!contour.isContinuous() || contour.toList().size() < 5) {
-                // || !Imgproc.isContourConvex(contour)
+            minAreaRect = Imgproc.minAreaRect(new MatOfPoint2f(contour.toArray()));
+            if (!contour.isContinuous() || contour.toList().size() < 5 ||
+                    minAreaRect.size.width < .05 * scannerView.getWidth() ||
+                    minAreaRect.size.height < .05 * scannerView.getHeight()) {
                 ignoredContours.add(contour);
             }
         }
         contours.removeAll(ignoredContours);
     }
 
-    private RotatedRect getEllipseForContour(final MatOfPoint contour) {
-        MatOfPoint2f mat2F = new MatOfPoint2f();
-        contour.convertTo(mat2F, CvType.CV_32FC2);
-        return Imgproc.fitEllipse(mat2F);
-    }
-
-    private boolean contourIsEllipse(MatOfPoint contour) {
-        //TODO: match contour to its ellipses' contour
-//        Mat ellipseContour = new Mat();
-//        Imgproc.drawContours(ellipseContour, getEllipseForContour(contour), 1, SCALAR_RED, 2);
-//        return Imgproc.matchShapes(contour, getEllipseForContour(contour), Imgproc.CV_CONTOURS_MATCH_I1, 0.0) <= ELLIPSE_MATCH_THRESHOLD;
-        return true;
-    }
-
     private LinkedList<RotatedRect> detectEllipticalContours(final Mat frame, final LinkedList<MatOfPoint> contours) {
         LinkedList<RotatedRect> ellipseRects = new LinkedList<>();
         for (MatOfPoint contour : contours) {
-            RotatedRect ellipseRect = getEllipseForContour(contour);
+            RotatedRect ellipseRect = Imgproc.minAreaRect(new MatOfPoint2f(contour.toArray()));
             if (contourIsEllipse(contour)) {
                 Imgproc.ellipse(frame, ellipseRect.center, ellipseRect.size,
-                        ellipseRect.angle, 0, 360, SCALAR_GREEN, 10);
-            } else {
+                        ellipseRect.angle, 0, 360, new Scalar(0, 255, 0), 3);
+            }/* else {
                 Imgproc.ellipse(frame, ellipseRect.center, ellipseRect.size,
-                        ellipseRect.angle, 0, 360, SCALAR_RED, 10);
-            }
+                        ellipseRect.angle, 0, 360, new Scalar(255, 0, 0), 1);
+            }*/
+//            Imgproc.drawContours(frame, contours, contours.indexOf(contour), SCALAR_BLUE, 1);
         }
         return ellipseRects;
     }
 
-    private void drawRotatedRect(final Mat frame, final RotatedRect rotatedRect) {
-        Point[] rect_points = new Point[4];
-        rotatedRect.points(rect_points);
-        for (int i = 0; i < 4; ++i) {
-            Imgproc.line(frame, rect_points[i], rect_points[(i + 1) % 4], SCALAR_BLUE, 3);
+    private boolean contourIsEllipse(MatOfPoint contour) {
+        MatOfPoint2f contour2F = new MatOfPoint2f(contour.toArray());
+        MatOfPoint2f approxCurve = new MatOfPoint2f();
+        Imgproc.approxPolyDP(contour2F, approxCurve, 0.01 * Imgproc.arcLength(contour2F, true), true);
+//        double contourArea = Imgproc.minAreaRect(contour2F).size.area();
+        double matchValue = Imgproc.matchShapes(contour, approxCurve, Imgproc.CV_CONTOURS_MATCH_I1, 0.0);
+        return matchValue > 0 && matchValue < 0.03;/* &&
+                (Math.abs(contourArea - Imgproc.minAreaRect(approxCurve).size.area()) < (0.075 * contourArea));*/
+    }
+
+    private Size getScaledDownSize(final Mat frame) {
+        double wRatio = SCALED_DOWN_MAX_IMAGE_WIDTH / frame.width();
+        double hRatio = SCALED_DOWN_MAX_IMAGE_HEIGHT / frame.height();
+
+        if (wRatio >= hRatio) {
+            return new Size(frame.width() * wRatio, frame.height() * wRatio);
+        } else {
+            return new Size(frame.width() * hRatio, frame.height() * hRatio);
         }
     }
 }
